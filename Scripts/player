@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+
+# Import Current Theme
+theme="/$HOME/.config/rofi/config/player.rasi"
+
+# Theme Elements
+player=$(playerctl -a status --format "{{lc(status)}}:{{playerName}}" | grep "playing" | awk -F':' '{print $2}' | head -n 1)
+status=$(playerctl --player "${player}" status --format "{{lc(status)}}:{{playerName}}" | grep "playing" | awk -F':' '{print $1}' | head -n 1)
+loop=$(playerctl --player "${player}" loop --format "{{lc(loop)}}")
+shuffle=$(playerctl --player "${player}" shuffle --format "{{lc(shuffle)}}")
+
+curl -o /tmp/i `playerctl --player "${player}" metadata --format "{{markup_escape(mpris:artUrl)}}"`
+
+# art="`playerctl --player $player metadata --format '{{markup_escape(mpris:artUrl)}}'`"
+art="/tmp/i"
+
+magick $art /tmp/i.jpg && rm /tmp/i
+
+art="/tmp/i.jpg"
+
+icon="/usr/share/icons/Papirus-Dark/symbolic/status/mpi-symbolic.svg"
+
+
+if [[ -z "$player" ]]; then
+	prompt='Offline'
+	mesg="Nothing is playing"
+else
+	prompt=$(playerctl --player "${player}" metadata --format "{{artist}}")
+	mesg=$(playerctl -p "${player}" metadata --format "{{title}} :: {{duration(position)}}|{{duration(mpris:length)}}")
+fi
+
+
+list_col='4'
+list_row='1'
+
+
+# Options
+layout=`cat ${theme} | grep 'USE_ICON' | cut -d'=' -f2`
+if [[ "$layout" == 'NO' ]]; then
+	if [[ ${status} == "playing" ]]; then
+		option_1=" Pause"
+	else
+		option_1=" Play"
+	fi
+	option_2=" Stop"
+	option_3=" Previous"
+	option_4=" Next"
+	option_5=" Repeat"
+	option_6=" Random"
+else
+	if [[ ${status} == "playing" ]]; then
+		option_1=""
+	else
+		option_1=""
+	fi
+	option_2=""
+	option_3=""
+	option_4=""
+	option_5=""
+	option_6=""
+fi
+
+# Toggle Actions
+active=''
+urgent=''
+# Repeat
+if [[ ${loop} != *"none"* ]]; then
+    active="-a 4"
+elif [[ ${loop} == *"none"* ]]; then
+    urgent="-u 4"
+else
+    option_5=" Parsing Error"
+fi
+# Random
+if [[ ${shuffle} ]]; then
+    [ -n "$active" ] && active+=",5" || active="-a 5"
+elif [[ ! ${shuffle} ]]; then
+    [ -n "$urgent" ] && urgent+=",5" || urgent="-u 5"
+else
+    option_6=" Parsing Error"
+fi
+
+# Rofi CMD
+rofi_cmd() {
+	rofi -theme-str "listview {columns: $list_col; lines: $list_row;}" \
+		-dmenu \
+		-p "$prompt" \
+		-mesg "$mesg" \
+		${active} ${urgent} \
+		-markup-rows \
+		-theme ${theme}
+}
+
+# Pass variables to rofi dmenu
+run_rofi() {
+	echo -e "$option_1\n$option_2\n$option_3\n$option_4" | rofi_cmd
+}
+
+# Execute Command
+run_cmd() {
+	if [[ "$1" == '--opt1' ]]; then
+		playerctl play-pause && dunstify "$option_1" "`playerctl metadata --format '{{title}} - {{artist}}'`" -r '9992' -i $art  -t 1000
+	elif [[ "$1" == '--opt2' ]]; then
+		playerctl stop
+	elif [[ "$1" == '--opt3' ]]; then
+		playerctl previous && dunstify "Playing: " "`playerctl metadata --format '{{title}} - {{artist}}'`" -r '9992' -i $art  -t 1000
+	elif [[ "$1" == '--opt4' ]]; then
+		playerctl next && dunstify "Playing: " "`playerctl metadata --format '{{title}} - {{artist}}'`" -r '9992' -i $art  -t 1000
+	elif [[ "$1" == '--opt5' ]]; then
+		playerctl loop None
+	elif [[ "$1" == '--opt6' ]]; then
+		playerctl shuffle toggle
+	fi
+}
+
+# Actions
+chosen="$(run_rofi)"
+case ${chosen} in
+    $option_1)
+		run_cmd --opt1
+        ;;
+    $option_2)
+		run_cmd --opt2
+        ;;
+    $option_3)
+		run_cmd --opt3
+        ;;
+    $option_4)
+		run_cmd --opt4
+        ;;
+    $option_5)
+		run_cmd --opt5
+        ;;
+    $option_6)
+		run_cmd --opt6
+        ;;
+esac

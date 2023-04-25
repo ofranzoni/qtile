@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+
+# exit when any command fails
+set -e
+
+FONT="${FONT:-JetBrainsMono Nerd Font 10}"
+THEME="/$HOME/.config/rofi/config/nordvpn.rasi"
+
+
+
+echoexit() {
+    # Print to stderr and exit
+    printf "%s\n" "$@" 1>&2
+    exit 1
+}
+
+# Checking dependencies:
+whereis nordvpn >/dev/null || echoexit "'nordvpn' not found."
+
+completion_to_lines() {
+    tr '\t' '\n' | sed '/^[[:space:]]*$/d'
+}
+
+init_menu() {
+    # Initial menu.
+    declare urgent
+    local choices status meshnet
+
+    meshnet=$(nordvpn settings | grep Meshnet | awk -F': ' '{print $2}')
+    status="$(nordvpn status | tr -d '\r -')"
+
+    if [ -n "${status##*Connected*}" ]; then
+        icon='textbox-prompt-colon {str: ""; text-color: @RED;}'
+        choices="Connect\nMeshnet\nSettings"
+    else
+        icon='textbox-prompt-colon {str: ""; text-color: @GRE;}'
+        choices="Disconnect\nMeshnet\nSettings"
+        # printf "%s" "$(printf "%s" "$status" | grep "City" | cut -d ":" -f 2)"
+    fi
+    
+    if [ -z "${meshnet##*enabled*}" ]; then
+        urgent="1"
+    fi
+
+    printf "%b" "$choices" | menu
+}
+
+menu() {
+    # Menu command, should read from stdin and write to stdout.
+    rofi \
+            -theme "$THEME" \
+            -dmenu -i \
+            -p "NordVPN" \
+            -theme-str "$icon" \
+            -u "$urgent" \
+            -a "$active"
+}
+
+
+
+
+connect() {
+    # nordvpn connect options.
+    local choices
+    choices="default\ncountries\ncities\np2p\nonion"
+    printf "%b" "$choices" | menu
+}
+
+countries() {
+    # Country selection.
+    nordvpn connect --generate-bash-completion | completion_to_lines | menu
+}
+
+cities() {
+    # City selection.
+    # Arg:
+    #   $1: a country
+    nordvpn connect "$1" --generate-bash-completion | completion_to_lines | menu
+}
+
+disconnect() {
+    # disconnect
+    nordvpn disconnect
+}
+
+
+mesh_status() {
+    # Show vpn status.
+    local choices header
+    echo "urgent: $urgent"
+    if [[ ${urgent} != "1" ]]; then
+        header="Host:\nIP:\nOS:\nVersion:\n"
+        choices="$(nordvpn mesh peer list | awk -F': ' '/Hostname/ || /IP/ || /OS/ || /Distribution/ {print $2}' | awk 'NR%4{printf "%s\n",$0;next;}1')"
+        printf "%s""$header""$choices" | rofi \
+                                -theme "$THEME" \
+                                -dmenu -i \
+                                -p "Meshnet" \
+                                -mesg "Devices" \
+                                -theme-str "listview {columns: 4; lines: 4;dynamic: true;}" \
+                                -theme-str "window {width: 1000px;} listview {fixed-columns: true; flow: horizontal;}" \
+                                -theme-str "mainbox {children: [inputbar, message, listview];}" \
+                                -theme-str "element selected {background-color: @FG;  text-color:@BG;border: 1px; border-color:@BG;border-radius:0px;}" \
+                                -theme-str "element {background-color: @FG;  text-color:@BG;border: 1px; border-color:@BG;}"
+    else
+        nordvpn set mesh 1
+    fi
+    
+}
+
+settings() {
+    # Show vpn settings.
+    local choices
+    choices="$(nordvpn settings | tr -d '\r-' | sed 's/^ *//')"
+    printf "%s" "$choices" | menu
+}
+
+# Parse options to the `rofi-nordvpn` command
+while getopts ":hs" opt; do
+    case ${opt} in
+    h)
+        usage
+        exit 0
+        ;;
+    s)
+        status
+        exit 0
+        ;;
+    \?)
+        printf "Invalid Option: -%s\n" "$OPTARG" 1>&2
+        usage
+        exit 1
+        ;;
+    esac
+done
+
+case "$(init_menu)" in
+"connect")
+    case $(connect) in
+    "default")
+        nordvpn connect
+        ;;
+    "countries")
+        country="$(countries)"
+        [ -n "$country" ] && nordvpn connect "$country"
+        ;;
+    "cities")
+        country="$(countries)"
+        [ -n "$country" ] && city="$(cities "$country")"
+        [ -n "$city" ] && nordvpn connect "$country" "$city"
+        ;;
+    "p2p")
+        nordvpn connect p2p
+        ;;
+    "onion")
+        nordvpn connect onion_over_vpn
+        ;;
+    *) ;;
+
+    esac
+    ;;
+"Disconnect")
+    disconnect
+    ;;
+"Meshnet")
+    mesh_status
+    ;;
+"Settings")
+    settings
+    ;;
+*) ;;
+
+esac

@@ -1,0 +1,52 @@
+#! /usr/bin/env bash
+
+FONT="${FONT:-JetBrainsMono Nerd Font 10}"
+theme="/$HOME/.config/rofi/config/calendar.rasi"
+
+###### Variables ######
+
+year=$(date '+%Y')
+month=$(date '+%m')
+day=$(date '+%-d')
+
+
+TODAY=$(cal $month $year | sed -n '1s/^ *\(.*[^ ]\) *$/\1/p')
+
+CAL=$(cal -m $month $year | tail -n +2 | while read -rn3 i; do
+    if [[ ${#i} = 0 ]]; then
+        echo "  "
+    elif [[ ${#i} = 1 ]]; then
+        echo " "$i
+    elif [[ ${#i} = 2 ]]; then
+        echo "${i^}"
+    fi
+done)
+
+td=$(cal -m $month $year | tail -n +2 | while read -rn3 i; do
+    if [[ "$i" = "$day" ]]; then
+        echo "$row"
+        break
+    fi
+    ((row++)) 
+done)
+
+
+active=$(cal -m $month $year | tail -n +2 | while read -rn3 i; do
+    # echo $row
+    if [[ ${#i} = 0 ]]; then
+        echo "$row,"
+    fi
+    ((row++))
+done)
+
+urgent="0,1,2,3,4,5,6"
+
+echo "$CAL" | rofi \
+                -dmenu \
+                -theme-str 'listview {lines: 6 ;scrollbar: false;columns: 7;}' \
+                -mesg "  ${TODAY^}" \
+                -selected-row "$td" \
+                -theme ${theme} \
+                -u "$urgent" \
+                -a "$active"
+

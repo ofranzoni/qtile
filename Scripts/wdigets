@@ -1,0 +1,18 @@
+#!/bin/bash
+
+alacritty -t btop --class group-widget-1 -e btop &
+
+alacritty -t spotcli --class group-widget-6 -e spt &
+
+alacritty -t cava --class group-widget-2 -e cava &
+
+alacritty -t nofecth --class group-widget-4 -e myprompt &
+
+alacritty -t cbonsai --class group-widget-3 -e cbonsai -i -l &
+
+alacritty -t asciiquarium --class group-widget-5 -e asciiquarium &
+
+#spotifyd &
+
+
+

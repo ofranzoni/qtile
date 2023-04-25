@@ -1,0 +1,66 @@
+#!/bin/bash
+
+show_help() {
+    echo "Valid Options:
+        -u|--up     Increase volume level
+        -d|--down   Decrease volume level
+        -t|--mute   Toggle speaker mute
+        -s|--status Return current volume level
+    "
+}
+
+while [[ "$#" > 0 ]]; do case $1 in
+    -h|--help) show_help; exit 0;shift;;
+    -u|--up) PARAM='-i'; STEP='5'; TEXT="Increasing to";shift;;
+    -d|--down) PARAM='-d'; STEP='5'; TEXT="Decreasing to";shift;;
+    -t|--mute) TOGGLE=1; PARAM='-t';shift;;
+    -s|--status) STATUS=1;shift;;
+    *) notify-send "Not a valid volume argument: $1" -t 2000; exit 1; shift;;
+esac; done
+
+MUTE=$(pamixer --get-mute)
+VOLUME=$(pamixer --get-volume)
+SOUND_PATH='/home/stavox/.config/qtile/sounds/MacOS/stereo/audio-volume-change.ogg'
+
+
+if [[ "$MUTE" = false && "$TOGGLE" = 1 ]]; then
+    ICON='/usr/share/icons/Papirus-Dark/48x48/status/notification-audio-volume-muted.svg'
+elif (( "$VOLUME" >= 0 && "$VOLUME" < 30 )); then
+    ICON='/usr/share/icons/Papirus-Dark/48x48/status/notification-audio-volume-low.svg'
+elif (( "$VOLUME" >= 30 && "$VOLUME" < 70 )); then
+    ICON='/usr/share/icons/Papirus-Dark/48x48/status/notification-audio-volume-medium.svg'
+elif (( "$VOLUME" >= 70 )); then
+    ICON='/usr/share/icons/Papirus-Dark/48x48/status/notification-audio-volume-high.svg'
+fi
+
+notify() {
+    notify-send "$ICON $1" \
+        -t 500 \
+        -h string:synchronous:volume \
+        -h "int:value:$2" \
+        -u low
+}
+
+if [ "$STATUS" = 1 ]; then
+    while sleep 1; do
+        VOL=$(pamixer --get-volume)
+        echo "$ICON ${VOL}%"
+    done
+elif [ "$MUTE" = false ] && [ "$TOGGLE" = 1 ]; then
+    pamixer $PARAM
+    dunstify -a Control -r "9991" -i $ICON  -h string:synchronous:volume -t 2000
+    paplay -p $SOUND_PATH 
+elif [ "$MUTE" = true ] || [ "$TOGGLE" = 0 ]; then
+    pamixer -t
+    dunstify -a Control -r "9991" -i $ICON -h string:synchronous:volume -t 2000
+    paplay -p $SOUND_PATH 
+else
+    pamixer $PARAM $STEP
+    VOLUME=$(pamixer --get-volume)
+    let DEC="($VOLUME*255)/100"
+    printf -v OP "%x" $DEC:.2f
+    HL="#cba6f7$OP"
+
+    dunstify -r "9991" -i $ICON -t 2000 -h int:value:${VOLUME} "$TEXT " "${VOLUME}%" -h string:hlcolor:$HL
+    paplay -p $SOUND_PATH 
+fi
